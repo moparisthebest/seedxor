@@ -10,6 +10,9 @@
 //! ## Example
 //!
 //! ```rust
+//! use seed_xor::Mnemonic;
+//! use std::str::FromStr;
+//!
 //! // Coldcard example: https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md
 //! let a_str = "romance wink lottery autumn shop bring dawn tongue range crater truth ability miss spice fitness easy legal release recall obey exchange recycle dragon room";
 //! let b_str = "lion misery divide hurry latin fluid camp advance illegal lab pyramid unaware eager fringe sick camera series noodle toy crowd jeans select depth lounge";
@@ -56,10 +59,10 @@ pub enum SeedXorError {
 impl From<bip39::Error> for SeedXorError {
     fn from(err: bip39::Error) -> Self {
         match err {
-            bip39::Error::BadEntropyBitCount(_) => return Self::EntropyBitsNot256,
-            bip39::Error::BadWordCount(_) => return Self::WordCountNot24,
-            bip39::Error::UnknownWord(i) => return Self::UnknownWord(i),
-            bip39::Error::InvalidChecksum => return Self::InvalidChecksum,
+            bip39::Error::BadEntropyBitCount(_) => Self::EntropyBitsNot256,
+            bip39::Error::BadWordCount(_) => Self::WordCountNot24,
+            bip39::Error::UnknownWord(i) => Self::UnknownWord(i),
+            bip39::Error::InvalidChecksum => Self::InvalidChecksum,
             bip39::Error::AmbiguousLanguages(_) => Self::AmbiguousLanguages,
         }
     }
@@ -81,9 +84,10 @@ impl fmt::Display for SeedXorError {
     }
 }
 
-/// Wrapper for a [bip39::Mnemonic] which is aliased as `Inner`
+/// Wrapper for a [bip39::Mnemonic] which is aliased as `Inner`.
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct Mnemonic {
+    /// Actual [bip39::Mnemonic] which is wrapped to be able to implement the XOR operator.
     inner: Inner,
 }
 
@@ -95,7 +99,7 @@ impl Mnemonic {
         Ok(Mnemonic { inner })
     }
 
-    /// Access the inner [bip39::Mnemonic] for more functionality.
+    /// Access the private inner [bip39::Mnemonic] for more functionality.
     pub fn inner(&self) -> &Inner {
         &self.inner
     }
@@ -104,25 +108,25 @@ impl Mnemonic {
     /// but it returns an `Err` if the entropy does not result in a 24 word mnemonic.
     pub fn from_entropy(entropy: &[u8]) -> Result<Self, SeedXorError> {
         match Inner::from_entropy(entropy) {
-            Ok(inner) => return Ok(Mnemonic::new(inner)?),
-            Err(err) => return Err(SeedXorError::from(err)),
+            Ok(inner) => Mnemonic::new(inner),
+            Err(err) => Err(SeedXorError::from(err)),
         }
     }
 
     /// XOR two [Mnemonic]s without consuming them.
     /// If consumption is not of relevance the XOR operator `^` and XOR assigner `^=` can be used as well.
     fn xor(&self, rhs: &Self) -> Self {
-        let mut xor_result = Vec::with_capacity(MAX_MNEMONIC_LENGTH);
-
-        // XOR self's and other's entropy and push result
-        self.inner
+        // self and rhs have both 256bit entropy
+        let xor_result = self
+            .inner
             .to_entropy()
             .iter()
             .zip(rhs.inner.to_entropy().iter())
-            .for_each(|(a, b)| xor_result.push(a ^ b));
+            .map(|(a, b)| a ^ b)
+            .collect::<Vec<u8>>();
 
         // We unwrap here because xor_result has as many bytes as self and rhs
-        // which in turn have a valid number of bytes
+        // which in turn have a valid number of bytes.
         Mnemonic::from_entropy(&xor_result).unwrap()
     }
 }
@@ -132,7 +136,7 @@ impl FromStr for Mnemonic {
 
     fn from_str(mnemonic: &str) -> Result<Self, <Self as FromStr>::Err> {
         match Inner::from_str(mnemonic) {
-            Ok(inner) => return Ok(Mnemonic::new(inner)?),
+            Ok(inner) => Mnemonic::new(inner),
             Err(err) => Err(SeedXorError::from(err)),
         }
     }
