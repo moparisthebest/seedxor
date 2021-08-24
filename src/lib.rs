@@ -1,10 +1,11 @@
 //! # seed-xor
 //!
 //! seed-xor builds on top of [rust-bip39](https://github.com/rust-bitcoin/rust-bip39/)
-//! and lets you XOR 24-word mnemonics as defined in [Coldcards docs](https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md).
+//! and lets you XOR bip39 mnemonics as defined in [Coldcards docs](https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md).
 //!
 //!
-//! Future versions will also allow you to XOR different seed lengths.
+//! It is also possible to XOR mnemonics with differing numbers of words.
+//! For this the shorter one will be extended with 0s during the XOR calculation.
 //!
 //!
 //! ## Example
@@ -19,8 +20,8 @@
 //! let c_str = "vault nominee cradle silk own frown throw leg cactus recall talent worry gadget surface shy planet purpose coffee drip few seven term squeeze educate";
 //! let result_str = "silent toe meat possible chair blossom wait occur this worth option bag nurse find fish scene bench asthma bike wage world quit primary indoor";
 //!
-//! // Mnemonic is a wrapper for bip39::Mnemonic which ensures a 24 word seed length.
-//! // Mnemonics can also be created from 256bit entropy.
+//! // Mnemonic is a wrapper for bip39::Mnemonic which implements the XOR operation `^`.
+//! // Mnemonics can also be created from entropy.
 //! let a = Mnemonic::from_str(a_str).unwrap();
 //! let b = Mnemonic::from_str(b_str).unwrap();
 //! let c = Mnemonic::from_str(c_str).unwrap();
@@ -37,53 +38,6 @@ use std::{
 
 use bip39::Mnemonic as Inner;
 
-/// Maximal number of words in a mnemonic.
-const MAX_MNEMONIC_LENGTH: usize = 24;
-
-/// Errors same as [bip39::Error] but specifically for 24 word mnemonics.
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub enum SeedXorError {
-    /// Mnemonic has a word count that is not 24.
-    WordCountNot24,
-    /// Mnemonic contains an unknown word.
-    /// Error contains the index of the word.
-    UnknownWord(usize),
-    /// Entropy was not a 256 bits in length.
-    EntropyBitsNot256,
-    /// The mnemonic has an invalid checksum.
-    InvalidChecksum,
-    /// The mnemonic can be interpreted as multiple languages.
-    AmbiguousLanguages,
-}
-
-impl From<bip39::Error> for SeedXorError {
-    fn from(err: bip39::Error) -> Self {
-        match err {
-            bip39::Error::BadEntropyBitCount(_) => Self::EntropyBitsNot256,
-            bip39::Error::BadWordCount(_) => Self::WordCountNot24,
-            bip39::Error::UnknownWord(i) => Self::UnknownWord(i),
-            bip39::Error::InvalidChecksum => Self::InvalidChecksum,
-            bip39::Error::AmbiguousLanguages(_) => Self::AmbiguousLanguages,
-        }
-    }
-}
-
-impl fmt::Display for SeedXorError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            SeedXorError::WordCountNot24 => {
-                write!(f, "Mnemonic has a word count that is not 24",)
-            }
-            SeedXorError::UnknownWord(i) => {
-                write!(f, "Mnemonic contains an unknown word (word {})", i,)
-            }
-            SeedXorError::EntropyBitsNot256 => write!(f, "Entropy was not between 256 bits",),
-            SeedXorError::InvalidChecksum => write!(f, "Mnemonic has an invalid checksum"),
-            SeedXorError::AmbiguousLanguages => write!(f, "Ambiguous language"),
-        }
-    }
-}
-
 /// Wrapper for a [bip39::Mnemonic] which is aliased as `Inner`.
 #[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
 pub struct Mnemonic {
@@ -92,11 +46,9 @@ pub struct Mnemonic {
 }
 
 impl Mnemonic {
-    /// Private constructor which ensures that a new [Mnemonic] instance has 24 words.
-    fn new(inner: Inner) -> Result<Self, SeedXorError> {
-        ensure_24_words(&inner)?;
-
-        Ok(Mnemonic { inner })
+    /// Private constructor.
+    fn new(inner: Inner) -> Self {
+        Mnemonic { inner }
     }
 
     /// Access the private inner [bip39::Mnemonic] for more functionality.
@@ -104,40 +56,44 @@ impl Mnemonic {
         &self.inner
     }
 
-    /// Wrapper for the same method as in [bip39::Mnemonic]
-    /// but it returns an `Err` if the entropy does not result in a 24 word mnemonic.
-    pub fn from_entropy(entropy: &[u8]) -> Result<Self, SeedXorError> {
+    /// Wrapper for the same method as in [bip39::Mnemonic].
+    pub fn from_entropy(entropy: &[u8]) -> Result<Self, bip39::Error> {
         match Inner::from_entropy(entropy) {
-            Ok(inner) => Mnemonic::new(inner),
-            Err(err) => Err(SeedXorError::from(err)),
+            Ok(inner) => Ok(Mnemonic::new(inner)),
+            Err(err) => Err(err),
         }
     }
 
     /// XOR two [Mnemonic]s without consuming them.
     /// If consumption is not of relevance the XOR operator `^` and XOR assigner `^=` can be used as well.
     fn xor(&self, rhs: &Self) -> Self {
-        // self and rhs have both 256bit entropy
-        let xor_result = self
-            .inner
-            .to_entropy()
-            .iter()
-            .zip(rhs.inner.to_entropy().iter())
-            .map(|(a, b)| a ^ b)
-            .collect::<Vec<u8>>();
+        let mut entropy = self.inner.to_entropy();
+        let xor_values = rhs.inner.to_entropy();
 
-        // We unwrap here because xor_result has as many bytes as self and rhs
-        // which in turn have a valid number of bytes.
-        Mnemonic::from_entropy(&xor_result).unwrap()
+        // XOR each Byte
+        entropy
+            .iter_mut()
+            .zip(xor_values.iter())
+            .for_each(|(a, b)| *a ^= b);
+
+        // Extend entropy with values of xor_values if it has a shorter entropy length.
+        if entropy.len() < xor_values.len() {
+            entropy.extend(xor_values.iter().skip(entropy.len()))
+        }
+
+        // We unwrap here because entropy has either as many Bytes
+        // as self or rhs and both are valid mnemonics.
+        Mnemonic::from_entropy(&entropy).unwrap()
     }
 }
 
 impl FromStr for Mnemonic {
-    type Err = SeedXorError;
+    type Err = bip39::Error;
 
     fn from_str(mnemonic: &str) -> Result<Self, <Self as FromStr>::Err> {
         match Inner::from_str(mnemonic) {
-            Ok(inner) => Mnemonic::new(inner),
-            Err(err) => Err(SeedXorError::from(err)),
+            Ok(inner) => Ok(Mnemonic::new(inner)),
+            Err(err) => Err(err),
         }
     }
 }
@@ -168,15 +124,6 @@ impl BitXorAssign for Mnemonic {
     }
 }
 
-/// Ensures that an [Inner] is a 24 word mnemonic for wrapping into a [Mnemonic].
-fn ensure_24_words(inner: &Inner) -> Result<(), SeedXorError> {
-    if inner.word_count() != MAX_MNEMONIC_LENGTH {
-        return Err(SeedXorError::WordCountNot24);
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use crate::Mnemonic;
@@ -196,9 +143,7 @@ mod tests {
         let result = Mnemonic::from_str(result_str).unwrap();
 
         assert_eq!(result, a.clone() ^ b.clone() ^ c.clone());
-
-        // Different order
-        assert_eq!(result, b ^ c ^ a);
+        assert_eq!(result, b ^ c ^ a); // Commutative
     }
 
     #[test]
@@ -218,5 +163,23 @@ mod tests {
         assigned ^= c;
 
         assert_eq!(result, assigned);
+    }
+
+    #[test]
+    fn seed_xor_with_different_lengths_works() {
+        // Coldcard example: https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md
+        // but truncated mnemonics with correct last word.
+        let str_24 = "romance wink lottery autumn shop bring dawn tongue range crater truth ability miss spice fitness easy legal release recall obey exchange recycle dragon room";
+        let str_16 = "lion misery divide hurry latin fluid camp advance illegal lab pyramid unaware eager fringe sick camera series number";
+        let str_12 = "vault nominee cradle silk own frown throw leg cactus recall talent wisdom";
+        let result_str = "silent toe meat possible chair blossom wait occur this worth option aware since milk mother grace rocket cement recall obey exchange recycle dragon rocket";
+
+        let w_24 = Mnemonic::from_str(str_24).unwrap();
+        let w_16 = Mnemonic::from_str(str_16).unwrap();
+        let w_12 = Mnemonic::from_str(str_12).unwrap();
+        let result = Mnemonic::from_str(result_str).unwrap();
+
+        assert_eq!(result, w_24.clone() ^ w_16.clone() ^ w_12.clone());
+        assert_eq!(result, w_12 ^ w_24 ^ w_16); // Commutative
     }
 }
