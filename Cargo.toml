@@ -1,6 +1,6 @@
 [package]
 name = "seed-xor"
-version = "0.1.1"
+version = "1.0.0"
 edition = "2018"
 authors = ["KaiWitt <kaiwitt@protonmail.com>"]
 description = "XOR bip39 mnemonics."
@@ -14,4 +14,4 @@ publish = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bip39 = "1.0.1"
+bip39 = "1.0.*"

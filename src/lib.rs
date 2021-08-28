@@ -1,11 +1,11 @@
 //! # seed-xor
 //!
 //! seed-xor builds on top of [rust-bip39](https://github.com/rust-bitcoin/rust-bip39/)
-//! and lets you XOR bip39 mnemonics as defined in [Coldcards docs](https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md).
+//! and lets you XOR bip39 mnemonics as described in [Coldcards docs](https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md).
 //!
 //!
 //! It is also possible to XOR mnemonics with differing numbers of words.
-//! For this the shorter one will be extended with 0s during the XOR calculation.
+//! For this the xored value takes on the entropy surplus of the longer seed.
 //!
 //!
 //! ## Example
@@ -36,39 +36,17 @@ use std::{
     str::FromStr,
 };
 
-use bip39::Mnemonic as Inner;
-
-/// Wrapper for a [bip39::Mnemonic] which is aliased as `Inner`.
-#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
-pub struct Mnemonic {
-    /// Actual [bip39::Mnemonic] which is wrapped to be able to implement the XOR operator.
-    inner: Inner,
+/// Trait for a `XOR`.
+pub trait SeedXor {
+    /// XOR two values without consuming them.
+    fn xor(&self, rhs: &Self) -> Self;
 }
 
-impl Mnemonic {
-    /// Private constructor.
-    fn new(inner: Inner) -> Self {
-        Mnemonic { inner }
-    }
-
-    /// Access the private inner [bip39::Mnemonic] for more functionality.
-    pub fn inner(&self) -> &Inner {
-        &self.inner
-    }
-
-    /// Wrapper for the same method as in [bip39::Mnemonic].
-    pub fn from_entropy(entropy: &[u8]) -> Result<Self, bip39::Error> {
-        match Inner::from_entropy(entropy) {
-            Ok(inner) => Ok(Mnemonic::new(inner)),
-            Err(err) => Err(err),
-        }
-    }
-
-    /// XOR two [Mnemonic]s without consuming them.
-    /// If consumption is not of relevance the XOR operator `^` and XOR assigner `^=` can be used as well.
+impl SeedXor for bip39::Mnemonic {
+    /// XOR self with another [bip39::Mnemonic] without consuming it or itself.
     fn xor(&self, rhs: &Self) -> Self {
-        let mut entropy = self.inner.to_entropy();
-        let xor_values = rhs.inner.to_entropy();
+        let mut entropy = self.to_entropy();
+        let xor_values = rhs.to_entropy();
 
         // XOR each Byte
         entropy
@@ -83,7 +61,35 @@ impl Mnemonic {
 
         // We unwrap here because entropy has either as many Bytes
         // as self or rhs and both are valid mnemonics.
-        Mnemonic::from_entropy(&entropy).unwrap()
+        bip39::Mnemonic::from_entropy(&entropy).unwrap()
+    }
+}
+
+/// Wrapper for a [bip39::Mnemonic] for the implementation of `^` and `^=` operators.
+#[derive(Clone, PartialEq, Eq, Debug, Hash, PartialOrd, Ord)]
+pub struct Mnemonic {
+    /// Actual [bip39::Mnemonic] which is wrapped to be able to implement the XOR operator.
+    pub inner: bip39::Mnemonic,
+}
+
+impl Mnemonic {
+    /// Private constructor.
+    fn new(inner: bip39::Mnemonic) -> Self {
+        Mnemonic { inner }
+    }
+
+    /// Wrapper for the same method as in [bip39::Mnemonic].
+    pub fn from_entropy(entropy: &[u8]) -> Result<Self, bip39::Error> {
+        match bip39::Mnemonic::from_entropy(entropy) {
+            Ok(inner) => Ok(Mnemonic::new(inner)),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// XOR two [Mnemonic]s without consuming them.
+    /// If consumption is not of relevance the XOR operator `^` and XOR assigner `^=` can be used as well.
+    fn xor(&self, rhs: &Self) -> Self {
+        Mnemonic::new(self.inner.xor(&rhs.inner))
     }
 }
 
@@ -91,7 +97,7 @@ impl FromStr for Mnemonic {
     type Err = bip39::Error;
 
     fn from_str(mnemonic: &str) -> Result<Self, <Self as FromStr>::Err> {
-        match Inner::from_str(mnemonic) {
+        match bip39::Mnemonic::from_str(mnemonic) {
             Ok(inner) => Ok(Mnemonic::new(inner)),
             Err(err) => Err(err),
         }
