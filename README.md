@@ -1,11 +1,11 @@
 # seed-xor
 
 seed-xor builds on top of [rust-bip39](https://github.com/rust-bitcoin/rust-bip39/)
-and lets you XOR bip39 mnemonics as defined in [Coldcards docs](https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md).
+and lets you XOR bip39 mnemonics as described in [Coldcards docs](https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md).
 
 
 It is also possible to XOR mnemonics with differing numbers of words.
-For this the shorter one will be extended with 0s during the XOR calculation.
+For this the shorter one will be extended with the longer one's surplus entropy.
 
 
 ## Example
