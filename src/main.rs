@@ -1,6 +1,5 @@
-use seedxor::{Language, Mnemonic, SeedXor};
-use std::process::ExitCode;
-use std::str::FromStr;
+use seedxor::{expand_words, Language, Mnemonic, SeedXor};
+use std::{process::ExitCode, str::FromStr};
 
 pub struct Args {
     args: Vec<String>,
@@ -74,17 +73,18 @@ const WORD_COUNT: usize = 24;
 fn help(success: bool) -> ExitCode {
     println!(
         r###"usage: seedxor [options...]
- -h, --help                      Display this help
- -s, --split <seed>              Split seed into num-seeds
- -n, --num-seeds <num>           Number of seeds to split into or generate
-                                 default {NUM_SEEDS}
- -y, --no-validate               Do not validate a split can be successfully recombined, useful for
-                                 non-bip39 seeds, like ethereum
- -g, --generate                  Generate num-seeds
- -w, --word-count <num>          Number of words to generate in the seed
-                                 default {WORD_COUNT}
- -c, --combine <seeds...>        Combine seeds into one seed
- -r, --short                     Display only first 4 letters of seed words
+ -h, --help                        Display this help
+ -s, --split <seed>                Split seed into num-seeds
+ -n, --num-seeds <num>             Number of seeds to split into or generate
+                                   default {NUM_SEEDS}
+ -y, --no-validate                 Do not validate a split can be successfully recombined, useful for
+                                   non-bip39 seeds, like ethereum
+ -g, --generate                    Generate num-seeds
+ -w, --word-count <num>            Number of words to generate in the seed
+                                   default {WORD_COUNT}
+ -c, --combine <seeds...>          Combine seeds into one seed
+ -r, --short                       Display only first 4 letters of seed words
+ -u, --unscramble <seed-parts...>  Unscramble seed words in random order to valid seeds
         "###
     );
     if success {
@@ -157,8 +157,39 @@ fn main() -> ExitCode {
             .collect();
         let seed = Mnemonic::xor_all(&parts).unwrap();
         println!("{}", seed.to_display_string(short));
+    } else if args.flags(&["-u", "--unscramble"]) {
+        let remaining = args.remaining();
+        if remaining.is_empty() {
+            println!("error: --unscramble needs > 0 arguments");
+            return help(false);
+        }
+        let mut parts: Vec<String> = remaining
+            .into_iter()
+            .map(|s| expand_words(&s).expect("invalid bip39 seed words"))
+            .collect();
+        let total: u128 = (1..=parts.len() as u128).product();
+        eprintln!("# total permutations: {total}");
+        if total > u64::MAX as u128 {
+            println!("total too large, will never finish, aborting");
+            return ExitCode::FAILURE;
+        }
+        let mut heap = permutohedron::Heap::new(&mut parts);
+        let mut good = 0u64;
+        while let Some(words) = heap.next_permutation() {
+            let words = words.join(" ");
+            if let Ok(mnemonic) = Mnemonic::from_str(&words) {
+                if short {
+                    println!("{}", mnemonic.to_short_string());
+                } else {
+                    println!("{words}");
+                }
+                good += 1;
+            }
+        }
+        let bad = total - good as u128;
+        eprintln!("# good: {good} bad: {bad} total: {total}");
     } else {
-        println!("error: need one of -s/-g/-c");
+        println!("error: need one of -s/-g/-c/-u");
         return help(false);
     }
     ExitCode::SUCCESS

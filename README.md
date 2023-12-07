@@ -3,7 +3,7 @@
 seedxor builds on top of [rust-bip39](https://github.com/rust-bitcoin/rust-bip39/) and is a fork of [seed-xor](https://github.com/kaiwolfram/seed-xor)
 and lets you XOR bip39 mnemonics as described in [Coldcards docs](https://github.com/Coldcard/firmware/blob/master/docs/seed-xor.md).
 
-It also lets you split existing mnemonics into as many seeds as you wish
+It also lets you split existing mnemonics into as many seeds as you wish, and unscramble parts of a seed in random order into valid seeds.
 
 It is also possible to XOR mnemonics with differing numbers of words.
 For this the xored value takes on the entropy surplus of the longer seed.
@@ -12,17 +12,18 @@ For this the xored value takes on the entropy surplus of the longer seed.
 
 ```
 usage: seedxor [options...]
- -h, --help                      Display this help
- -s, --split <seed>              Split seed into num-seeds
- -n, --num-seeds <num>           Number of seeds to split into or generate
-                                 default 2
- -y, --no-validate               Do not validate a split can be successfully recombined, useful for
-                                 non-bip39 seeds, like ethereum
- -g, --generate                  Generate num-seeds
- -w, --word-count <num>          Number of words to generate in the seed
-                                 default 24
- -c, --combine <seeds...>        Combine seeds into one seed
- -r, --short                     Display only first 4 letters of seed words
+ -h, --help                        Display this help
+ -s, --split <seed>                Split seed into num-seeds
+ -n, --num-seeds <num>             Number of seeds to split into or generate
+                                   default 2
+ -y, --no-validate                 Do not validate a split can be successfully recombined, useful for
+                                   non-bip39 seeds, like ethereum
+ -g, --generate                    Generate num-seeds
+ -w, --word-count <num>            Number of words to generate in the seed
+                                   default 24
+ -c, --combine <seeds...>          Combine seeds into one seed
+ -r, --short                       Display only first 4 letters of seed words
+ -u, --unscramble <seed-parts...>  Unscramble seed words in random order to valid seeds
 ```
 
 ```
@@ -45,6 +46,17 @@ spell system smoke army frame vacant trick jacket anchor gasp acoustic supply de
 solar lab option erosion unit example convince viable soft smart smile spoon range card gentle miracle latin they verify want reject side cheese panther
 $ seedxor -c 'spell system smoke army frame vacant trick jacket anchor gasp acoustic supply deputy portion butter similar trend scorpion cause fish outer armor process faint' 'solar lab option erosion unit example convince viable soft smart smile spoon range card gentle miracle latin they verify want reject side cheese panther'
 butter patch first doll raise safe side lounge shiver protect solid area melody member lazy easily nice canvas stomach pattern claim slot million stomach
+
+$ seedxor -u 'affair mutual spare' 'smooth mushroom scale' 'include neck grab' 'fly maze obtain'
+# total permutations: 24
+include neck grab smooth mushroom scale fly maze obtain affair mutual spare
+# good: 1 bad: 23 total: 24
+
+$ seedxor -u 'squirrel tray cheese' 'seek enhance oval' 'expect sense fish' 'total salad page'
+# total permutations: 24
+squirrel tray cheese seek enhance oval expect sense fish total salad page
+expect sense fish squirrel tray cheese seek enhance oval total salad page
+# good: 2 bad: 22 total: 24
 ```
 
 ## Library Example

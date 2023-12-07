@@ -37,11 +37,10 @@
 //! ```
 //!
 pub use bip39::{Error, Language};
-use std::fmt::Display;
-use std::ops::{Deref, DerefMut};
 use std::{
     fmt,
-    ops::{BitXor, BitXorAssign},
+    fmt::Display,
+    ops::{BitXor, BitXorAssign, Deref, DerefMut},
     str::FromStr,
 };
 
@@ -149,11 +148,18 @@ impl Mnemonic {
 
     pub fn to_short_string(&self) -> String {
         let mut ret = self.word_iter().fold(String::new(), |mut s, w| {
-            w.chars().take(4).for_each(|c| s.push(c));
-            s.push(' ');
+            if w.len() == 3 {
+                s.push_str(w);
+                s.push_str("  ");
+            } else {
+                w.chars().take(4).for_each(|c| s.push(c));
+                s.push(' ');
+            }
             s
         });
-        ret.pop();
+        while ret.chars().last() == Some(' ') {
+            ret.pop();
+        }
         ret
     }
 
@@ -401,7 +407,7 @@ mod tests {
 
         let short_string = seed.to_short_string();
         assert_eq!(
-            "sile toe meat poss chai blos wait occu this wort opti boy",
+            "sile toe  meat poss chai blos wait occu this wort opti boy",
             short_string
         );
         //assert_eq!(Language::English, bip39::Mnemonic::language_of(&short_string).unwrap());
@@ -414,7 +420,7 @@ mod tests {
 
         let short_string = seed.to_short_string();
         assert_eq!(
-            "song vani mist nigh drin add modi lens aver cool evil ches",
+            "song vani mist nigh drin add  modi lens aver cool evil ches",
             short_string
         );
         assert_eq!(
@@ -429,7 +435,7 @@ mod tests {
 
         let short_string = seed.to_short_string();
         assert_eq!(
-            "ramp exot reso icon sun addi equi sand leis spar swin toas",
+            "ramp exot reso icon sun  addi equi sand leis spar swin toas",
             short_string
         );
         assert_eq!(

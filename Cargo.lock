@@ -41,11 +41,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9cdc71e17332e86d2e1d38c1f99edcb6288ee11b815fb1a4b049eaa2114d369b"
 
 [[package]]
+name = "permutohedron"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b687ff7b5da449d39e418ad391e5e08da53ec334903ddbb921db208908fc372c"
+
+[[package]]
 name = "seedxor"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bip39",
  "getrandom",
+ "permutohedron",
 ]
 
 [[package]]
